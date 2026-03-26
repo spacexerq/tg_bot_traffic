@@ -91,6 +91,36 @@ set +a
 traffic-guard daemon
 ```
 
+## Install On A VPS
+
+Clone the repository on the server:
+
+```bash
+git clone https://github.com/spacexerq/tg_bot_traffic.git /opt/traffic-guard-src
+cd /opt/traffic-guard-src
+git checkout codex/traffic-telegram-bot
+```
+
+Run the installer as root:
+
+```bash
+sudo bash scripts/install.sh
+```
+
+Edit the environment file:
+
+```bash
+sudo nano /etc/traffic-guard.env
+```
+
+Start and inspect the service:
+
+```bash
+sudo systemctl start traffic-guard
+sudo systemctl status traffic-guard
+sudo journalctl -u traffic-guard -f
+```
+
 ## Environment Variables
 
 - `TG_BOT_TOKEN`: Telegram bot token
@@ -120,17 +150,21 @@ Suggested layout on a server:
 - env file: `/etc/traffic-guard.env`
 - state file: `/var/lib/traffic-guard/state.json`
 
-## Create A Private Remote
+The installer creates:
 
-This workspace is already a Git repository, but a private remote still needs to be created in your Git hosting account.
+- virtual environment in `/opt/traffic-guard/.venv`
+- systemd unit in `/etc/systemd/system/traffic-guard.service`
+- env template from [deploy/traffic-guard.env.example](C:/Users/user.LAPTOP-M7DTCFMM/Documents/New%20project/deploy/traffic-guard.env.example)
 
-Typical flow:
+If you prefer a different layout, override these variables before running the installer:
 
 ```bash
-git remote add origin <private-repo-url>
-git add .
-git commit -m "Initial traffic guard MVP"
-git push -u origin codex/traffic-telegram-bot
+sudo APP_DIR=/srv/traffic-guard ENV_TARGET=/etc/traffic-guard.env bash scripts/install.sh
 ```
 
-If you want, we can do the remote setup next once you provide the hosting target (`GitHub`, `GitLab`, `Gitea`) and authentication method.
+## Operational Notes
+
+- The service is intended for Linux VPS only.
+- Threshold notifications are sent once per month per threshold.
+- At the start of a new UTC month, the local counter resets automatically.
+- If your provider counts traffic differently from interface counters, we can add provider API polling in the next step.
