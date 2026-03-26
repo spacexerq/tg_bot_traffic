@@ -147,7 +147,6 @@ def run_check(settings: Settings, send_notifications: bool = True, force_daily_r
 def run_daemon(settings: Settings) -> None:
     while True:
         run_check(settings, send_notifications=True)
-        process_bot_commands(settings)
         time.sleep(settings.check_interval_seconds)
 
 
