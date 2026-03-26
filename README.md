@@ -39,6 +39,8 @@ Included in this repository:
 
 - one-shot check command
 - daemon mode with interval polling
+- doctor command for first launch validation
+- interface diagnostics
 - JSON state file
 - Telegram Bot API notifications
 - systemd unit example
@@ -91,6 +93,14 @@ set +a
 traffic-guard daemon
 ```
 
+Run diagnostics:
+
+```bash
+traffic-guard show-interfaces
+traffic-guard doctor
+traffic-guard doctor --send-test-message
+```
+
 ## Install On A VPS
 
 Clone the repository on the server:
@@ -116,9 +126,17 @@ sudo nano /etc/traffic-guard.env
 Start and inspect the service:
 
 ```bash
+sudo /opt/traffic-guard/.venv/bin/traffic-guard --env-file /etc/traffic-guard.env doctor
+sudo /opt/traffic-guard/.venv/bin/traffic-guard --env-file /etc/traffic-guard.env doctor --send-test-message
 sudo systemctl start traffic-guard
 sudo systemctl status traffic-guard
 sudo journalctl -u traffic-guard -f
+```
+
+If the selected interfaces look wrong, inspect them first:
+
+```bash
+sudo /opt/traffic-guard/.venv/bin/traffic-guard --env-file /etc/traffic-guard.env show-interfaces
 ```
 
 ## Environment Variables
@@ -135,10 +153,35 @@ sudo journalctl -u traffic-guard -f
 
 ## Telegram Bot Setup
 
-1. Create a bot through `@BotFather`.
-2. Get the bot token.
-3. Add the bot to the target chat or start a direct chat with it.
-4. Obtain the chat id.
+1. Open Telegram and start a chat with `@BotFather`.
+2. Run `/newbot`.
+3. Give the bot a display name.
+4. Give the bot a unique username ending with `bot`.
+5. Copy the bot token and put it into `TG_BOT_TOKEN`.
+6. Decide where alerts should arrive:
+7. For private alerts: open a direct chat with your bot and press `Start`.
+8. For group alerts: create a group, add the bot, and allow it to post messages.
+9. Send at least one message in that chat so the bot has a dialog context.
+10. Obtain the numeric chat id.
+
+Private chat id is usually your user id or a positive chat id.
+Group chat id is usually negative.
+
+One practical way to get the chat id:
+
+```bash
+curl "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates"
+```
+
+Then find `chat.id` in the JSON response and copy it into `TG_CHAT_ID`.
+
+After filling `/etc/traffic-guard.env`, run:
+
+```bash
+sudo /opt/traffic-guard/.venv/bin/traffic-guard --env-file /etc/traffic-guard.env doctor --send-test-message
+```
+
+If the message arrives in Telegram, the bot side is configured correctly.
 
 ## Deployment With systemd
 
@@ -154,6 +197,7 @@ The installer creates:
 
 - virtual environment in `/opt/traffic-guard/.venv`
 - systemd unit in `/etc/systemd/system/traffic-guard.service`
+- profile template unit in [deploy/systemd/traffic-guard@.service](C:/Users/user.LAPTOP-M7DTCFMM/Documents/New%20project/deploy/systemd/traffic-guard@.service)
 - env template from [deploy/traffic-guard.env.example](C:/Users/user.LAPTOP-M7DTCFMM/Documents/New%20project/deploy/traffic-guard.env.example)
 
 If you prefer a different layout, override these variables before running the installer:
@@ -161,6 +205,34 @@ If you prefer a different layout, override these variables before running the in
 ```bash
 sudo APP_DIR=/srv/traffic-guard ENV_TARGET=/etc/traffic-guard.env bash scripts/install.sh
 ```
+
+## Multiple Profiles On One Host
+
+If one host needs more than one independent profile, first run the base installer, then create a profile:
+
+```bash
+sudo bash scripts/install-profile.sh backup-node
+sudo nano /etc/traffic-guard/backup-node.env
+sudo systemctl start traffic-guard@backup-node
+```
+
+This creates:
+
+- profile env: `/etc/traffic-guard/backup-node.env`
+- profile state: `/var/lib/traffic-guard/backup-node/state.json`
+- service name: `traffic-guard@backup-node`
+
+This is useful if one host should notify to different chats, use different thresholds, or track different interfaces.
+
+## First Launch Checklist
+
+1. Install the project with `scripts/install.sh`.
+2. Fill `/etc/traffic-guard.env`.
+3. Run `doctor` without Telegram sending.
+4. Run `doctor --send-test-message`.
+5. Confirm the message arrived in Telegram.
+6. Start `traffic-guard` via `systemctl`.
+7. Watch logs with `journalctl -u traffic-guard -f`.
 
 ## Operational Notes
 

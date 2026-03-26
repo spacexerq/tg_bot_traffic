@@ -5,8 +5,10 @@ set -euo pipefail
 APP_DIR="${APP_DIR:-/opt/traffic-guard}"
 ENV_TARGET="${ENV_TARGET:-/etc/traffic-guard.env}"
 STATE_DIR="${STATE_DIR:-/var/lib/traffic-guard}"
+PROFILE_DIR="${PROFILE_DIR:-/etc/traffic-guard}"
 SERVICE_NAME="${SERVICE_NAME:-traffic-guard}"
 SYSTEMD_UNIT_TARGET="/etc/systemd/system/${SERVICE_NAME}.service"
+SYSTEMD_TEMPLATE_TARGET="/etc/systemd/system/${SERVICE_NAME}@.service"
 
 if [[ "${EUID}" -ne 0 ]]; then
   echo "Run this script as root." >&2
@@ -42,6 +44,25 @@ User=root
 WorkingDirectory=${APP_DIR}
 EnvironmentFile=${ENV_TARGET}
 ExecStart=${APP_DIR}/.venv/bin/traffic-guard daemon
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+cat > "${SYSTEMD_TEMPLATE_TARGET}" <<EOF
+[Unit]
+Description=Traffic Guard Telegram notifier (%i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=${APP_DIR}
+EnvironmentFile=${PROFILE_DIR}/%i.env
+ExecStart=${APP_DIR}/.venv/bin/traffic-guard --env-file ${PROFILE_DIR}/%i.env daemon
 Restart=always
 RestartSec=10
 

@@ -1,0 +1,16 @@
+[Unit]
+Description=Traffic Guard Telegram notifier (%i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/traffic-guard
+EnvironmentFile=/etc/traffic-guard/%i.env
+ExecStart=/opt/traffic-guard/.venv/bin/traffic-guard --env-file /etc/traffic-guard/%i.env daemon
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

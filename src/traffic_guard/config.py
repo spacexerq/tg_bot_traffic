@@ -26,7 +26,23 @@ class Settings:
         return int(self.monthly_limit_gb * 1024 * 1024 * 1024)
 
 
-def load_settings() -> Settings:
+def load_env_file(path: Path) -> None:
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            continue
+        key, value = line.split("=", maxsplit=1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        os.environ[key] = value
+
+
+def load_settings(env_file: Path | None = None) -> Settings:
+    if env_file is not None:
+        load_env_file(env_file)
+
     bot_token = os.environ["TG_BOT_TOKEN"]
     chat_id = os.environ["TG_CHAT_ID"]
     server_name = os.environ.get("TG_SERVER_NAME", "unknown-server")
