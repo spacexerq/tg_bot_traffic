@@ -185,6 +185,11 @@ The VPS service now starts in `agent` mode, which means:
 - `TG_DAILY_REPORT_HOUR`: daily report hour
 - `TG_DAILY_REPORT_MINUTE`: daily report minute
 - `TG_DAILY_REPORT_TIMEZONE`: IANA timezone for daily reports, for example `Europe/Moscow`
+- `TG_MONTHLY_RESET_HOUR`: monthly reset hour
+- `TG_MONTHLY_RESET_MINUTE`: monthly reset minute
+- `TG_MONTHLY_RESET_TIMEZONE`: IANA timezone for monthly reset scheduling
+- `TG_CONTROL_BOT_TOKEN`: optional control bot token used for monthly reset notifications
+- `TG_CONTROL_NOTIFY_CHAT_ID`: optional target chat id for monthly reset notifications
 - `TG_AGENT_TOKEN`: shared secret used by the central control bot to access this server
 - `TG_AGENT_PORT`: HTTP port for the local agent API
 
@@ -337,6 +342,30 @@ sudo /opt/traffic-guard/.venv/bin/traffic-guard --env-file /etc/traffic-guard.en
 ```
 
 The daemon checks the schedule every `TG_CHECK_INTERVAL_SECONDS` seconds, so sending can be delayed by up to one polling interval.
+
+## Monthly Auto Reset
+
+The VPS agent can automatically start a new local accounting period every month.
+
+Recommended settings for your case:
+
+```env
+TG_MONTHLY_RESET_HOUR=0
+TG_MONTHLY_RESET_MINUTE=1
+TG_MONTHLY_RESET_TIMEZONE=Europe/Moscow
+TG_CONTROL_BOT_TOKEN=<control-bot-token>
+TG_CONTROL_NOTIFY_CHAT_ID=<your-personal-chat-id>
+```
+
+This means:
+
+- on the `1st` day of each month
+- at `00:01`
+- in `Europe/Moscow` time
+- the local tracked counter is automatically reset
+- a notification is sent through the control bot to your Telegram chat
+
+This reset affects only local bot accounting, not the hosting provider billing panel.
 
 ## Deployment With systemd
 

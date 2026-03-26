@@ -37,6 +37,15 @@ def load_state(path: Path, period: str) -> State:
     )
 
 
+def peek_saved_period(path: Path) -> str | None:
+    if not path.exists():
+        return None
+
+    data = json.loads(path.read_text(encoding="utf-8"))
+    value = data.get("period")
+    return str(value) if value is not None else None
+
+
 def save_state(path: Path, state: State) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(asdict(state), indent=2), encoding="utf-8")

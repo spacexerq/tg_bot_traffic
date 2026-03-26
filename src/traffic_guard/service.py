@@ -3,10 +3,10 @@ from __future__ import annotations
 import time
 import threading
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from traffic_guard.config import Settings
-from traffic_guard.storage import State, load_state, save_state
+from traffic_guard.storage import State, load_state, peek_saved_period, save_state
 from traffic_guard.telegram_client import TelegramError, answer_callback_query, get_updates, send_message
 from traffic_guard.traffic import current_period_utc, read_traffic_snapshot
 
@@ -66,6 +66,15 @@ def format_status(settings: Settings, result: CheckResult) -> str:
     )
 
 
+def format_monthly_reset_notice(settings: Settings, new_period: str) -> str:
+    return (
+        f"[{settings.server_name}] monthly counter reset\n"
+        f"New period: {new_period}\n"
+        f"Reset time: {settings.monthly_reset_hour:02d}:{settings.monthly_reset_minute:02d} "
+        f"({settings.monthly_reset_timezone})"
+    )
+
+
 def status_payload(settings: Settings, result: CheckResult) -> dict[str, object]:
     return {
         "server_name": settings.server_name,
@@ -80,7 +89,7 @@ def status_payload(settings: Settings, result: CheckResult) -> dict[str, object]
 
 def reset_counter(settings: Settings) -> CheckResult:
     with _STATE_LOCK:
-        period = current_period_utc()
+        period = current_billing_period(settings)
         state = load_state(settings.state_file, period)
         snapshot = read_traffic_snapshot(settings.interface_include, settings.interface_exclude)
 
@@ -100,7 +109,8 @@ def reset_counter(settings: Settings) -> CheckResult:
 
 def run_check(settings: Settings, send_notifications: bool = True, force_daily_report: bool = False) -> CheckResult:
     with _STATE_LOCK:
-        period = current_period_utc()
+        period = current_billing_period(settings)
+        previous_period = peek_saved_period(settings.state_file)
         state = load_state(settings.state_file, period)
         snapshot = read_traffic_snapshot(settings.interface_include, settings.interface_exclude)
 
@@ -127,6 +137,8 @@ def run_check(settings: Settings, send_notifications: bool = True, force_daily_r
         )
 
         if send_notifications:
+            if previous_period is not None and previous_period != period:
+                _send_monthly_reset_notification(settings, period)
             for threshold in triggered_thresholds:
                 try:
                     send_message(settings.bot_token, settings.chat_id, format_alert(settings, result, threshold))
@@ -151,7 +163,7 @@ def run_daemon(settings: Settings) -> None:
 
 
 def process_bot_commands(settings: Settings) -> int:
-    period = current_period_utc()
+    period = current_billing_period(settings)
     state = load_state(settings.state_file, period)
     updates = get_updates(settings.bot_token, state.telegram_update_offset)
     handled_count = 0
@@ -244,6 +256,22 @@ def _current_report_date(settings: Settings) -> str:
     return datetime.now(settings.daily_report_zoneinfo).date().isoformat()
 
 
+def current_billing_period(settings: Settings) -> str:
+    now = datetime.now(settings.monthly_reset_zoneinfo)
+    scheduled_start = now.replace(day=1, hour=settings.monthly_reset_hour, minute=settings.monthly_reset_minute, second=0, microsecond=0)
+    if now >= scheduled_start:
+        target = now
+    else:
+        previous_month_anchor = (now.replace(day=1) - timedelta(days=1)).replace(
+            hour=settings.monthly_reset_hour,
+            minute=settings.monthly_reset_minute,
+            second=0,
+            microsecond=0,
+        )
+        target = previous_month_anchor
+    return target.strftime("%Y-%m")
+
+
 def _should_send_daily_report(settings: Settings, state: State) -> bool:
     if not settings.daily_report_enabled:
         return False
@@ -256,3 +284,17 @@ def _should_send_daily_report(settings: Settings, state: State) -> bool:
     scheduled_minutes = settings.daily_report_hour * 60 + settings.daily_report_minute
     now_minutes = now.hour * 60 + now.minute
     return now_minutes >= scheduled_minutes
+
+
+def _send_monthly_reset_notification(settings: Settings, new_period: str) -> None:
+    if not settings.control_bot_token or not settings.control_notify_chat_id:
+        return
+
+    try:
+        send_message(
+            settings.control_bot_token,
+            settings.control_notify_chat_id,
+            format_monthly_reset_notice(settings, new_period),
+        )
+    except TelegramError:
+        pass

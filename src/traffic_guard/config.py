@@ -27,6 +27,11 @@ class Settings:
     daily_report_hour: int
     daily_report_minute: int
     daily_report_timezone: str
+    monthly_reset_hour: int
+    monthly_reset_minute: int
+    monthly_reset_timezone: str
+    control_bot_token: str | None
+    control_notify_chat_id: str | None
 
     @property
     def monthly_limit_bytes(self) -> int:
@@ -35,6 +40,10 @@ class Settings:
     @property
     def daily_report_zoneinfo(self) -> ZoneInfo:
         return ZoneInfo(self.daily_report_timezone)
+
+    @property
+    def monthly_reset_zoneinfo(self) -> ZoneInfo:
+        return ZoneInfo(self.monthly_reset_timezone)
 
 
 @dataclass(slots=True)
@@ -85,6 +94,11 @@ def load_settings(env_file: Path | None = None) -> Settings:
     daily_report_hour = int(os.environ.get("TG_DAILY_REPORT_HOUR", "9"))
     daily_report_minute = int(os.environ.get("TG_DAILY_REPORT_MINUTE", "0"))
     daily_report_timezone = os.environ.get("TG_DAILY_REPORT_TIMEZONE", "Europe/Moscow")
+    monthly_reset_hour = int(os.environ.get("TG_MONTHLY_RESET_HOUR", "0"))
+    monthly_reset_minute = int(os.environ.get("TG_MONTHLY_RESET_MINUTE", "1"))
+    monthly_reset_timezone = os.environ.get("TG_MONTHLY_RESET_TIMEZONE", daily_report_timezone)
+    control_bot_token = os.environ.get("TG_CONTROL_BOT_TOKEN")
+    control_notify_chat_id = os.environ.get("TG_CONTROL_NOTIFY_CHAT_ID", command_chat_id)
 
     if not thresholds:
         raise ValueError("TG_ALERT_THRESHOLDS must contain at least one value")
@@ -96,7 +110,12 @@ def load_settings(env_file: Path | None = None) -> Settings:
         raise ValueError("TG_DAILY_REPORT_HOUR must be between 0 and 23")
     if not 0 <= daily_report_minute <= 59:
         raise ValueError("TG_DAILY_REPORT_MINUTE must be between 0 and 59")
+    if not 0 <= monthly_reset_hour <= 23:
+        raise ValueError("TG_MONTHLY_RESET_HOUR must be between 0 and 23")
+    if not 0 <= monthly_reset_minute <= 59:
+        raise ValueError("TG_MONTHLY_RESET_MINUTE must be between 0 and 59")
     ZoneInfo(daily_report_timezone)
+    ZoneInfo(monthly_reset_timezone)
 
     return Settings(
         bot_token=bot_token,
@@ -113,6 +132,11 @@ def load_settings(env_file: Path | None = None) -> Settings:
         daily_report_hour=daily_report_hour,
         daily_report_minute=daily_report_minute,
         daily_report_timezone=daily_report_timezone,
+        monthly_reset_hour=monthly_reset_hour,
+        monthly_reset_minute=monthly_reset_minute,
+        monthly_reset_timezone=monthly_reset_timezone,
+        control_bot_token=control_bot_token,
+        control_notify_chat_id=control_notify_chat_id,
     )
 
 
