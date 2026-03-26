@@ -1,0 +1,14 @@
+{
+  "servers": [
+    {
+      "name": "vps-01",
+      "base_url": "http://203.0.113.10:8787",
+      "api_token": "replace_with_shared_secret_for_vps_01"
+    },
+    {
+      "name": "vps-02",
+      "base_url": "http://203.0.113.11:8787",
+      "api_token": "replace_with_shared_secret_for_vps_02"
+    }
+  ]
+}

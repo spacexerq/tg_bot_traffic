@@ -1,5 +1,5 @@
 [Unit]
-Description=Traffic Guard Telegram notifier (%i)
+Description=Traffic Guard control bot
 After=network-online.target
 Wants=network-online.target
 
@@ -7,8 +7,8 @@ Wants=network-online.target
 Type=simple
 User=root
 WorkingDirectory=/opt/traffic-guard
-EnvironmentFile=/etc/traffic-guard/%i.env
-ExecStart=/opt/traffic-guard/.venv/bin/traffic-guard --env-file /etc/traffic-guard/%i.env agent
+EnvironmentFile=/etc/traffic-guard-control.env
+ExecStart=/opt/traffic-guard/.venv/bin/traffic-guard --env-file /etc/traffic-guard-control.env control-bot
 Restart=always
 RestartSec=10
 

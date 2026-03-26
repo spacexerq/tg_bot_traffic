@@ -7,11 +7,35 @@
 The practical MVP is:
 
 1. One private Git project with the monitoring code.
-2. The same service deployed on every VPS.
-3. Each server stores its own counters locally.
-4. Telegram messages identify the exact server and current usage.
+2. One agent deployed on every VPS.
+3. One central Telegram control bot.
+4. Each server stores its own counters locally.
+5. Telegram messages identify the exact server and current usage.
 
 This avoids a central database and works even when servers are independent.
+
+## Current Architecture
+
+There are now two roles in the project:
+
+1. `VPS agent`
+2. `Central control bot`
+
+`VPS agent`:
+
+- runs on every server
+- tracks local traffic
+- sends threshold and daily alerts
+- exposes a small HTTP API for `status` and `reset`
+
+`Central control bot`:
+
+- runs once on a separate host or one chosen server
+- uses its own dedicated Telegram bot token
+- receives commands only from your personal Telegram chat
+- shows buttons with the list of servers
+- requests status from available agents
+- can reset a selected server counter by button
 
 ## Plan
 
@@ -39,6 +63,8 @@ Included in this repository:
 
 - one-shot check command
 - daemon mode with interval polling
+- agent mode with local HTTP API
+- central control bot with server selection buttons
 - doctor command for first launch validation
 - interface diagnostics
 - JSON state file
@@ -49,9 +75,7 @@ Not included yet:
 
 - provider API integration
 - central dashboard
-- interactive Telegram commands
-
-Those can be added later if you want a single control bot.
+- persistent database for the control plane
 
 ## Requirements On VPS
 
@@ -139,6 +163,12 @@ If the selected interfaces look wrong, inspect them first:
 sudo /opt/traffic-guard/.venv/bin/traffic-guard --env-file /etc/traffic-guard.env show-interfaces
 ```
 
+The VPS service now starts in `agent` mode, which means:
+
+- traffic monitoring loop is active
+- Telegram alerts are active
+- local HTTP API is active for the central control bot
+
 ## Environment Variables
 
 - `TG_BOT_TOKEN`: Telegram bot token
@@ -155,6 +185,8 @@ sudo /opt/traffic-guard/.venv/bin/traffic-guard --env-file /etc/traffic-guard.en
 - `TG_DAILY_REPORT_HOUR`: daily report hour
 - `TG_DAILY_REPORT_MINUTE`: daily report minute
 - `TG_DAILY_REPORT_TIMEZONE`: IANA timezone for daily reports, for example `Europe/Moscow`
+- `TG_AGENT_TOKEN`: shared secret used by the central control bot to access this server
+- `TG_AGENT_PORT`: HTTP port for the local agent API
 
 ## Telegram Bot Setup
 
@@ -188,47 +220,96 @@ sudo /opt/traffic-guard/.venv/bin/traffic-guard --env-file /etc/traffic-guard.en
 
 If the message arrives in Telegram, the bot side is configured correctly.
 
-## Telegram Commands
+## Agent API
 
-The daemon can also answer bot commands from Telegram.
+Every VPS agent exposes:
 
-Supported commands:
+- `GET /status`
+- `POST /reset`
 
-- `/status`: current traffic usage on this server
-- `/reset`: show a reset button for the local counter
-- `/test`: test bot reply
-- `/help`: list available commands
+Both endpoints require header:
 
-By default commands are accepted only from `TG_CHAT_ID`.
-
-If alerts should go to a group, but commands should come from your personal profile, set:
-
-```env
-TG_CHAT_ID=-1001234567890
-TG_COMMAND_CHAT_ID=123456789
+```text
+X-Traffic-Guard-Token: <TG_AGENT_TOKEN>
 ```
 
-Then:
+`/reset` resets only the local tracked counter, not the provider billing panel.
 
-1. Add the bot to the alert group for notifications.
-2. Start a direct chat with the bot from your personal Telegram account.
-3. Send `/start`, `/status` or `/reset` to the bot in the personal chat.
+Make sure the chosen `TG_AGENT_PORT` is reachable from the host where the central control bot runs.
 
-To test command polling immediately:
+## Central Control Bot
+
+The central bot is a separate process with its own bot token and its own Telegram chat permissions.
+
+It provides:
+
+- button list of available servers
+- `Status all`
+- per-server status
+- per-server `Reset counter`
+
+### Control Bot Config
+
+Create env from [deploy/control-bot.env.example](C:/Users/user.LAPTOP-M7DTCFMM/Documents/New%20project/deploy/control-bot.env.example).
+
+Important variables:
+
+- `TG_BOT_TOKEN`: token of the central control bot
+- `TG_COMMAND_CHAT_ID`: your personal Telegram chat id allowed to use the control bot
+- `TG_CONTROL_SERVERS_FILE`: JSON file with the list of servers
+- `TG_CONTROL_STATE_FILE`: local state file for Telegram offset
+- `TG_CONTROL_POLL_INTERVAL_SECONDS`: polling interval for the control bot
+
+Server registry example is in [deploy/control-servers.example.json](C:/Users/user.LAPTOP-M7DTCFMM/Documents/New%20project/deploy/control-servers.example.json).
+
+Each server entry contains:
+
+- `name`
+- `base_url`
+- `api_token`
+
+### Install The Control Bot
+
+Clone the repository on the control host:
 
 ```bash
-sudo /opt/traffic-guard/.venv/bin/traffic-guard --env-file /etc/traffic-guard.env poll-commands
+git clone https://github.com/spacexerq/tg_bot_traffic.git /opt/traffic-guard-src
+cd /opt/traffic-guard-src
+git checkout codex/traffic-telegram-bot
 ```
 
-In daemon mode command polling runs automatically on every loop.
+Run:
 
-To reset the local tracked counter:
+```bash
+sudo bash scripts/install-control-bot.sh
+```
 
-1. Send `/reset` to the bot from the allowed command chat.
-2. Press `Reset counter`.
-3. The bot will set the local tracked usage to `0` and keep the current interface counters as the new baseline.
+Edit:
 
-This resets only the bot's local accounting, not the provider's billing panel.
+```bash
+sudo nano /etc/traffic-guard-control.env
+sudo nano /etc/traffic-guard/control-servers.json
+```
+
+Then start:
+
+```bash
+sudo systemctl start traffic-guard-control-bot
+sudo systemctl status traffic-guard-control-bot
+```
+
+### Use The Control Bot In Telegram
+
+1. Open a direct chat with the central control bot.
+2. Press `Start`.
+3. Send `/start` or `/servers`.
+4. Use the buttons:
+5. `Status all`
+6. one of the server buttons
+7. `Refresh`
+8. `Reset counter`
+
+Only `TG_COMMAND_CHAT_ID` is allowed to use these controls.
 
 ## Daily Traffic Report
 
@@ -273,6 +354,11 @@ The installer creates:
 - systemd unit in `/etc/systemd/system/traffic-guard.service`
 - profile template unit in [deploy/systemd/traffic-guard@.service](C:/Users/user.LAPTOP-M7DTCFMM/Documents/New%20project/deploy/systemd/traffic-guard@.service)
 - env template from [deploy/traffic-guard.env.example](C:/Users/user.LAPTOP-M7DTCFMM/Documents/New%20project/deploy/traffic-guard.env.example)
+- agent HTTP API served by the same process
+
+For the central control bot there is a separate unit example:
+
+- [deploy/systemd/traffic-guard-control-bot.service](C:/Users/user.LAPTOP-M7DTCFMM/Documents/New%20project/deploy/systemd/traffic-guard-control-bot.service)
 
 If you prefer a different layout, override these variables before running the installer:
 
@@ -300,13 +386,15 @@ This is useful if one host should notify to different chats, use different thres
 
 ## First Launch Checklist
 
-1. Install the project with `scripts/install.sh`.
-2. Fill `/etc/traffic-guard.env`.
-3. Run `doctor` without Telegram sending.
-4. Run `doctor --send-test-message`.
-5. Confirm the message arrived in Telegram.
-6. Start `traffic-guard` via `systemctl`.
-7. Watch logs with `journalctl -u traffic-guard -f`.
+1. Install the project on every VPS with `scripts/install.sh`.
+2. Fill `/etc/traffic-guard.env` on every VPS.
+3. Run `doctor` on every VPS.
+4. Confirm alert messages arrive from every VPS agent.
+5. Install the central control bot with `scripts/install-control-bot.sh`.
+6. Fill `/etc/traffic-guard-control.env`.
+7. Fill `/etc/traffic-guard/control-servers.json`.
+8. Start `traffic-guard-control-bot`.
+9. Open Telegram and use the server buttons from your personal chat.
 
 ## Operational Notes
 
@@ -314,3 +402,4 @@ This is useful if one host should notify to different chats, use different thres
 - Threshold notifications are sent once per month per threshold.
 - At the start of a new UTC month, the local counter resets automatically.
 - If your provider counts traffic differently from interface counters, we can add provider API polling in the next step.
+- The central control bot must be able to reach each VPS agent over network.

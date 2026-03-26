@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -34,6 +35,23 @@ class Settings:
     @property
     def daily_report_zoneinfo(self) -> ZoneInfo:
         return ZoneInfo(self.daily_report_timezone)
+
+
+@dataclass(slots=True)
+class ControlServer:
+    name: str
+    base_url: str
+    api_token: str
+
+
+@dataclass(slots=True)
+class ControlSettings:
+    bot_token: str
+    command_chat_id: str
+    servers_file: Path
+    state_file: Path
+    poll_interval_seconds: int
+    servers: list[ControlServer]
 
 
 def load_env_file(path: Path) -> None:
@@ -96,3 +114,46 @@ def load_settings(env_file: Path | None = None) -> Settings:
         daily_report_minute=daily_report_minute,
         daily_report_timezone=daily_report_timezone,
     )
+
+
+def load_control_settings(env_file: Path | None = None) -> ControlSettings:
+    if env_file is not None:
+        load_env_file(env_file)
+
+    bot_token = os.environ["TG_BOT_TOKEN"]
+    command_chat_id = os.environ["TG_COMMAND_CHAT_ID"]
+    servers_file = Path(os.environ.get("TG_CONTROL_SERVERS_FILE", "/etc/traffic-guard/control-servers.json"))
+    state_file = Path(os.environ.get("TG_CONTROL_STATE_FILE", "/var/lib/traffic-guard/control-bot-state.json"))
+    poll_interval_seconds = int(os.environ.get("TG_CONTROL_POLL_INTERVAL_SECONDS", "5"))
+
+    if poll_interval_seconds <= 0:
+        raise ValueError("TG_CONTROL_POLL_INTERVAL_SECONDS must be greater than zero")
+
+    servers = _load_control_servers(servers_file)
+    if not servers:
+        raise ValueError(f"No control servers configured in {servers_file}")
+
+    return ControlSettings(
+        bot_token=bot_token,
+        command_chat_id=command_chat_id,
+        servers_file=servers_file,
+        state_file=state_file,
+        poll_interval_seconds=poll_interval_seconds,
+        servers=servers,
+    )
+
+
+def _load_control_servers(path: Path) -> list[ControlServer]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    raw_servers = data.get("servers", data) if isinstance(data, dict) else data
+
+    servers: list[ControlServer] = []
+    for item in raw_servers:
+        servers.append(
+            ControlServer(
+                name=str(item["name"]),
+                base_url=str(item["base_url"]).rstrip("/"),
+                api_token=str(item["api_token"]),
+            )
+        )
+    return servers

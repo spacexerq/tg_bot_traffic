@@ -8,7 +8,7 @@ Type=simple
 User=root
 WorkingDirectory=/opt/traffic-guard
 EnvironmentFile=/etc/traffic-guard.env
-ExecStart=/opt/traffic-guard/.venv/bin/traffic-guard daemon
+ExecStart=/opt/traffic-guard/.venv/bin/traffic-guard agent
 Restart=always
 RestartSec=10
 

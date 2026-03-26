@@ -43,7 +43,7 @@ Type=simple
 User=root
 WorkingDirectory=${APP_DIR}
 EnvironmentFile=${ENV_TARGET}
-ExecStart=${APP_DIR}/.venv/bin/traffic-guard daemon
+ExecStart=${APP_DIR}/.venv/bin/traffic-guard agent
 Restart=always
 RestartSec=10
 
@@ -62,7 +62,7 @@ Type=simple
 User=root
 WorkingDirectory=${APP_DIR}
 EnvironmentFile=${PROFILE_DIR}/%i.env
-ExecStart=${APP_DIR}/.venv/bin/traffic-guard --env-file ${PROFILE_DIR}/%i.env daemon
+ExecStart=${APP_DIR}/.venv/bin/traffic-guard --env-file ${PROFILE_DIR}/%i.env agent
 Restart=always
 RestartSec=10
 

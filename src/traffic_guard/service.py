@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+import threading
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -8,6 +9,8 @@ from traffic_guard.config import Settings
 from traffic_guard.storage import State, load_state, save_state
 from traffic_guard.telegram_client import TelegramError, answer_callback_query, get_updates, send_message
 from traffic_guard.traffic import current_period_utc, read_traffic_snapshot
+
+_STATE_LOCK = threading.Lock()
 
 
 @dataclass(slots=True)
@@ -63,62 +66,76 @@ def format_status(settings: Settings, result: CheckResult) -> str:
     )
 
 
+def status_payload(settings: Settings, result: CheckResult) -> dict[str, object]:
+    return {
+        "server_name": settings.server_name,
+        "period": result.period,
+        "used_gb": round(format_bytes_as_gb(result.accumulated_bytes), 2),
+        "limit_gb": round(settings.monthly_limit_gb, 2),
+        "remaining_gb": round(max(settings.monthly_limit_gb - format_bytes_as_gb(result.accumulated_bytes), 0), 2),
+        "usage_percent": round(result.usage_percent, 2),
+        "interfaces": result.interfaces,
+    }
+
+
 def reset_counter(settings: Settings) -> CheckResult:
-    period = current_period_utc()
-    state = load_state(settings.state_file, period)
-    snapshot = read_traffic_snapshot(settings.interface_include, settings.interface_exclude)
+    with _STATE_LOCK:
+        period = current_period_utc()
+        state = load_state(settings.state_file, period)
+        snapshot = read_traffic_snapshot(settings.interface_include, settings.interface_exclude)
 
-    state.accumulated_bytes = 0
-    state.last_total_bytes = snapshot.total_bytes
-    state.notified_thresholds = []
-    save_state(settings.state_file, state)
+        state.accumulated_bytes = 0
+        state.last_total_bytes = snapshot.total_bytes
+        state.notified_thresholds = []
+        save_state(settings.state_file, state)
 
-    return CheckResult(
-        period=period,
-        accumulated_bytes=0,
-        usage_percent=0,
-        triggered_thresholds=[],
-        interfaces=snapshot.interfaces,
-    )
+        return CheckResult(
+            period=period,
+            accumulated_bytes=0,
+            usage_percent=0,
+            triggered_thresholds=[],
+            interfaces=snapshot.interfaces,
+        )
 
 
 def run_check(settings: Settings, send_notifications: bool = True, force_daily_report: bool = False) -> CheckResult:
-    period = current_period_utc()
-    state = load_state(settings.state_file, period)
-    snapshot = read_traffic_snapshot(settings.interface_include, settings.interface_exclude)
+    with _STATE_LOCK:
+        period = current_period_utc()
+        state = load_state(settings.state_file, period)
+        snapshot = read_traffic_snapshot(settings.interface_include, settings.interface_exclude)
 
-    accumulated_bytes = _calculate_accumulated_bytes(state, snapshot.total_bytes)
-    usage_percent = (accumulated_bytes / settings.monthly_limit_bytes) * 100
-    triggered_thresholds = [
-        threshold
-        for threshold in settings.alert_thresholds
-        if usage_percent >= threshold and threshold not in state.notified_thresholds
-    ]
+        accumulated_bytes = _calculate_accumulated_bytes(state, snapshot.total_bytes)
+        usage_percent = (accumulated_bytes / settings.monthly_limit_bytes) * 100
+        triggered_thresholds = [
+            threshold
+            for threshold in settings.alert_thresholds
+            if usage_percent >= threshold and threshold not in state.notified_thresholds
+        ]
 
-    state.accumulated_bytes = accumulated_bytes
-    state.last_total_bytes = snapshot.total_bytes
-    state.notified_thresholds.extend(triggered_thresholds)
-    state.notified_thresholds = sorted(set(state.notified_thresholds))
-    save_state(settings.state_file, state)
+        state.accumulated_bytes = accumulated_bytes
+        state.last_total_bytes = snapshot.total_bytes
+        state.notified_thresholds.extend(triggered_thresholds)
+        state.notified_thresholds = sorted(set(state.notified_thresholds))
+        save_state(settings.state_file, state)
 
-    result = CheckResult(
-        period=period,
-        accumulated_bytes=accumulated_bytes,
-        usage_percent=usage_percent,
-        triggered_thresholds=triggered_thresholds,
-        interfaces=snapshot.interfaces,
-    )
+        result = CheckResult(
+            period=period,
+            accumulated_bytes=accumulated_bytes,
+            usage_percent=usage_percent,
+            triggered_thresholds=triggered_thresholds,
+            interfaces=snapshot.interfaces,
+        )
 
-    if send_notifications:
-        for threshold in triggered_thresholds:
-            send_message(settings.bot_token, settings.chat_id, format_alert(settings, result, threshold))
-        if _should_send_daily_report(settings, state) or force_daily_report:
-            report_date = _current_report_date(settings)
-            send_message(settings.bot_token, settings.chat_id, format_daily_report(settings, result, report_date))
-            state.last_daily_report_date = report_date
-            save_state(settings.state_file, state)
+        if send_notifications:
+            for threshold in triggered_thresholds:
+                send_message(settings.bot_token, settings.chat_id, format_alert(settings, result, threshold))
+            if _should_send_daily_report(settings, state) or force_daily_report:
+                report_date = _current_report_date(settings)
+                send_message(settings.bot_token, settings.chat_id, format_daily_report(settings, result, report_date))
+                state.last_daily_report_date = report_date
+                save_state(settings.state_file, state)
 
-    return result
+        return result
 
 
 def run_daemon(settings: Settings) -> None:
