@@ -195,6 +195,7 @@ The daemon can also answer bot commands from Telegram.
 Supported commands:
 
 - `/status`: current traffic usage on this server
+- `/reset`: show a reset button for the local counter
 - `/test`: test bot reply
 - `/help`: list available commands
 
@@ -211,7 +212,7 @@ Then:
 
 1. Add the bot to the alert group for notifications.
 2. Start a direct chat with the bot from your personal Telegram account.
-3. Send `/start` or `/status` to the bot in the personal chat.
+3. Send `/start`, `/status` or `/reset` to the bot in the personal chat.
 
 To test command polling immediately:
 
@@ -220,6 +221,14 @@ sudo /opt/traffic-guard/.venv/bin/traffic-guard --env-file /etc/traffic-guard.en
 ```
 
 In daemon mode command polling runs automatically on every loop.
+
+To reset the local tracked counter:
+
+1. Send `/reset` to the bot from the allowed command chat.
+2. Press `Reset counter`.
+3. The bot will set the local tracked usage to `0` and keep the current interface counters as the new baseline.
+
+This resets only the bot's local accounting, not the provider's billing panel.
 
 ## Daily Traffic Report
 

@@ -6,7 +6,7 @@ from datetime import datetime
 
 from traffic_guard.config import Settings
 from traffic_guard.storage import State, load_state, save_state
-from traffic_guard.telegram_client import get_updates, send_message
+from traffic_guard.telegram_client import answer_callback_query, get_updates, send_message
 from traffic_guard.traffic import current_period_utc, read_traffic_snapshot
 
 
@@ -60,6 +60,25 @@ def format_status(settings: Settings, result: CheckResult) -> str:
         f"Remaining to limit: {remaining_gb:.2f} GB\n"
         f"Period: {result.period}\n"
         f"Interfaces: {interfaces}"
+    )
+
+
+def reset_counter(settings: Settings) -> CheckResult:
+    period = current_period_utc()
+    state = load_state(settings.state_file, period)
+    snapshot = read_traffic_snapshot(settings.interface_include, settings.interface_exclude)
+
+    state.accumulated_bytes = 0
+    state.last_total_bytes = snapshot.total_bytes
+    state.notified_thresholds = []
+    save_state(settings.state_file, state)
+
+    return CheckResult(
+        period=period,
+        accumulated_bytes=0,
+        usage_percent=0,
+        triggered_thresholds=[],
+        interfaces=snapshot.interfaces,
     )
 
 
@@ -122,10 +141,25 @@ def process_bot_commands(settings: Settings) -> int:
         if update.chat_id != settings.command_chat_id:
             continue
 
+        if update.callback_data == "reset_counter" and update.callback_query_id is not None:
+            result = reset_counter(settings)
+            answer_callback_query(settings.bot_token, update.callback_query_id, "Counter reset")
+            send_message(settings.bot_token, update.chat_id, f"[{settings.server_name}] counter reset\n{format_status(settings, result)}")
+            handled_count += 1
+            continue
+
+        if not update.text:
+            continue
+
         command = update.text.strip().split()[0].lower()
         if command.startswith("/status"):
             result = run_check(settings, send_notifications=False)
-            send_message(settings.bot_token, update.chat_id, format_status(settings, result))
+            send_message(
+                settings.bot_token,
+                update.chat_id,
+                format_status(settings, result),
+                inline_keyboard=[[{"text": "Reset counter", "callback_data": "reset_counter"}]],
+            )
             handled_count += 1
             continue
 
@@ -134,11 +168,21 @@ def process_bot_commands(settings: Settings) -> int:
             handled_count += 1
             continue
 
+        if command.startswith("/reset"):
+            send_message(
+                settings.bot_token,
+                update.chat_id,
+                f"[{settings.server_name}] confirm counter reset",
+                inline_keyboard=[[{"text": "Reset counter", "callback_data": "reset_counter"}]],
+            )
+            handled_count += 1
+            continue
+
         if command.startswith("/help") or command.startswith("/start"):
             send_message(
                 settings.bot_token,
                 update.chat_id,
-                "Available commands:\n/status - current traffic usage\n/test - test bot reply",
+                "Available commands:\n/status - current traffic usage\n/reset - show reset button\n/test - test bot reply",
             )
             handled_count += 1
 
