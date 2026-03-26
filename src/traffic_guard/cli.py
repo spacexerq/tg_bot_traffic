@@ -21,6 +21,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("check-once", help="Read counters, update state and send alerts if needed")
     subparsers.add_parser("daemon", help="Run periodic checks forever")
     subparsers.add_parser("test-message", help="Send a Telegram test message")
+    subparsers.add_parser("daily-report", help="Send the daily traffic summary immediately")
     subparsers.add_parser("show-interfaces", help="Print all detected Linux interfaces and counters")
     doctor_parser = subparsers.add_parser("doctor", help="Run a first-launch smoke check")
     doctor_parser.add_argument("--send-test-message", action="store_true", help="Also send a Telegram test message")
@@ -47,6 +48,14 @@ def main() -> None:
     if args.command == "test-message":
         send_message(settings.bot_token, settings.chat_id, f"[{settings.server_name}] Traffic Guard test message")
         print("Test message sent")
+        return
+
+    if args.command == "daily-report":
+        result = run_check(settings, send_notifications=True, force_daily_report=True)
+        print(
+            f"Daily report sent for {settings.server_name}: "
+            f"{format_bytes_as_gb(result.accumulated_bytes):.2f} GB used in {result.period}"
+        )
         return
 
     if args.command == "show-interfaces":

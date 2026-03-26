@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
+from datetime import datetime
 
 from traffic_guard.config import Settings
 from traffic_guard.storage import State, load_state, save_state
@@ -35,7 +36,21 @@ def format_alert(settings: Settings, result: CheckResult, threshold: int) -> str
     )
 
 
-def run_check(settings: Settings, send_notifications: bool = True) -> CheckResult:
+def format_daily_report(settings: Settings, result: CheckResult, report_date: str) -> str:
+    used_gb = format_bytes_as_gb(result.accumulated_bytes)
+    remaining_gb = max(settings.monthly_limit_gb - used_gb, 0)
+    interfaces = ", ".join(result.interfaces)
+    return (
+        f"[{settings.server_name}] daily traffic report\n"
+        f"Date: {report_date} ({settings.daily_report_timezone})\n"
+        f"Used this month: {used_gb:.2f} GB / {settings.monthly_limit_gb:.2f} GB ({result.usage_percent:.2f}%)\n"
+        f"Remaining to limit: {remaining_gb:.2f} GB\n"
+        f"Period: {result.period}\n"
+        f"Interfaces: {interfaces}"
+    )
+
+
+def run_check(settings: Settings, send_notifications: bool = True, force_daily_report: bool = False) -> CheckResult:
     period = current_period_utc()
     state = load_state(settings.state_file, period)
     snapshot = read_traffic_snapshot(settings.interface_include, settings.interface_exclude)
@@ -65,6 +80,11 @@ def run_check(settings: Settings, send_notifications: bool = True) -> CheckResul
     if send_notifications:
         for threshold in triggered_thresholds:
             send_message(settings.bot_token, settings.chat_id, format_alert(settings, result, threshold))
+        if _should_send_daily_report(settings, state) or force_daily_report:
+            report_date = _current_report_date(settings)
+            send_message(settings.bot_token, settings.chat_id, format_daily_report(settings, result, report_date))
+            state.last_daily_report_date = report_date
+            save_state(settings.state_file, state)
 
     return result
 
@@ -86,3 +106,21 @@ def _calculate_accumulated_bytes(state: State, current_total_bytes: int) -> int:
         delta = current_total_bytes
 
     return state.accumulated_bytes + delta
+
+
+def _current_report_date(settings: Settings) -> str:
+    return datetime.now(settings.daily_report_zoneinfo).date().isoformat()
+
+
+def _should_send_daily_report(settings: Settings, state: State) -> bool:
+    if not settings.daily_report_enabled:
+        return False
+
+    now = datetime.now(settings.daily_report_zoneinfo)
+    report_date = now.date().isoformat()
+    if state.last_daily_report_date == report_date:
+        return False
+
+    scheduled_minutes = settings.daily_report_hour * 60 + settings.daily_report_minute
+    now_minutes = now.hour * 60 + now.minute
+    return now_minutes >= scheduled_minutes

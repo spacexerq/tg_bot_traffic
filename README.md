@@ -150,6 +150,10 @@ sudo /opt/traffic-guard/.venv/bin/traffic-guard --env-file /etc/traffic-guard.en
 - `TG_INTERFACE_EXCLUDE`: comma-separated excluded interfaces
 - `TG_STATE_FILE`: where the JSON state is stored
 - `TG_CHECK_INTERVAL_SECONDS`: daemon polling interval
+- `TG_DAILY_REPORT_ENABLED`: enable daily summary messages
+- `TG_DAILY_REPORT_HOUR`: daily report hour
+- `TG_DAILY_REPORT_MINUTE`: daily report minute
+- `TG_DAILY_REPORT_TIMEZONE`: IANA timezone for daily reports, for example `Europe/Moscow`
 
 ## Telegram Bot Setup
 
@@ -182,6 +186,33 @@ sudo /opt/traffic-guard/.venv/bin/traffic-guard --env-file /etc/traffic-guard.en
 ```
 
 If the message arrives in Telegram, the bot side is configured correctly.
+
+## Daily Traffic Report
+
+The service can send one summary message per day in addition to threshold alerts.
+
+Example settings:
+
+```env
+TG_DAILY_REPORT_ENABLED=true
+TG_DAILY_REPORT_HOUR=9
+TG_DAILY_REPORT_MINUTE=0
+TG_DAILY_REPORT_TIMEZONE=Europe/Moscow
+```
+
+This means:
+
+- one report per day
+- at `09:00`
+- in `Europe/Moscow` time
+
+To test it immediately:
+
+```bash
+sudo /opt/traffic-guard/.venv/bin/traffic-guard --env-file /etc/traffic-guard.env daily-report
+```
+
+The daemon checks the schedule every `TG_CHECK_INTERVAL_SECONDS` seconds, so sending can be delayed by up to one polling interval.
 
 ## Deployment With systemd
 
