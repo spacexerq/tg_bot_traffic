@@ -128,12 +128,18 @@ def run_check(settings: Settings, send_notifications: bool = True, force_daily_r
 
         if send_notifications:
             for threshold in triggered_thresholds:
-                send_message(settings.bot_token, settings.chat_id, format_alert(settings, result, threshold))
+                try:
+                    send_message(settings.bot_token, settings.chat_id, format_alert(settings, result, threshold))
+                except TelegramError:
+                    pass
             if _should_send_daily_report(settings, state) or force_daily_report:
                 report_date = _current_report_date(settings)
-                send_message(settings.bot_token, settings.chat_id, format_daily_report(settings, result, report_date))
-                state.last_daily_report_date = report_date
-                save_state(settings.state_file, state)
+                try:
+                    send_message(settings.bot_token, settings.chat_id, format_daily_report(settings, result, report_date))
+                    state.last_daily_report_date = report_date
+                    save_state(settings.state_file, state)
+                except TelegramError:
+                    pass
 
         return result
 
