@@ -6,7 +6,7 @@ from datetime import datetime
 
 from traffic_guard.config import Settings
 from traffic_guard.storage import State, load_state, save_state
-from traffic_guard.telegram_client import send_message
+from traffic_guard.telegram_client import get_updates, send_message
 from traffic_guard.traffic import current_period_utc, read_traffic_snapshot
 
 
@@ -43,6 +43,19 @@ def format_daily_report(settings: Settings, result: CheckResult, report_date: st
     return (
         f"[{settings.server_name}] daily traffic report\n"
         f"Date: {report_date} ({settings.daily_report_timezone})\n"
+        f"Used this month: {used_gb:.2f} GB / {settings.monthly_limit_gb:.2f} GB ({result.usage_percent:.2f}%)\n"
+        f"Remaining to limit: {remaining_gb:.2f} GB\n"
+        f"Period: {result.period}\n"
+        f"Interfaces: {interfaces}"
+    )
+
+
+def format_status(settings: Settings, result: CheckResult) -> str:
+    used_gb = format_bytes_as_gb(result.accumulated_bytes)
+    remaining_gb = max(settings.monthly_limit_gb - used_gb, 0)
+    interfaces = ", ".join(result.interfaces)
+    return (
+        f"[{settings.server_name}] current traffic status\n"
         f"Used this month: {used_gb:.2f} GB / {settings.monthly_limit_gb:.2f} GB ({result.usage_percent:.2f}%)\n"
         f"Remaining to limit: {remaining_gb:.2f} GB\n"
         f"Period: {result.period}\n"
@@ -92,7 +105,47 @@ def run_check(settings: Settings, send_notifications: bool = True, force_daily_r
 def run_daemon(settings: Settings) -> None:
     while True:
         run_check(settings, send_notifications=True)
+        process_bot_commands(settings)
         time.sleep(settings.check_interval_seconds)
+
+
+def process_bot_commands(settings: Settings) -> int:
+    period = current_period_utc()
+    state = load_state(settings.state_file, period)
+    updates = get_updates(settings.bot_token, state.telegram_update_offset)
+    handled_count = 0
+    next_offset = state.telegram_update_offset
+
+    for update in updates:
+        next_offset = max(next_offset, update.update_id + 1)
+
+        if update.chat_id != settings.command_chat_id:
+            continue
+
+        command = update.text.strip().split()[0].lower()
+        if command.startswith("/status"):
+            result = run_check(settings, send_notifications=False)
+            send_message(settings.bot_token, update.chat_id, format_status(settings, result))
+            handled_count += 1
+            continue
+
+        if command.startswith("/test"):
+            send_message(settings.bot_token, update.chat_id, f"[{settings.server_name}] bot command channel is working")
+            handled_count += 1
+            continue
+
+        if command.startswith("/help") or command.startswith("/start"):
+            send_message(
+                settings.bot_token,
+                update.chat_id,
+                "Available commands:\n/status - current traffic usage\n/test - test bot reply",
+            )
+            handled_count += 1
+
+    latest_state = load_state(settings.state_file, period)
+    latest_state.telegram_update_offset = next_offset
+    save_state(settings.state_file, latest_state)
+    return handled_count
 
 
 def _calculate_accumulated_bytes(state: State, current_total_bytes: int) -> int:

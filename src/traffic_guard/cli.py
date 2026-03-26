@@ -4,7 +4,7 @@ import argparse
 from pathlib import Path
 
 from traffic_guard.config import load_settings
-from traffic_guard.service import format_bytes_as_gb, run_check, run_daemon
+from traffic_guard.service import format_bytes_as_gb, process_bot_commands, run_check, run_daemon
 from traffic_guard.telegram_client import send_message
 from traffic_guard.traffic import current_period_utc, read_all_interface_stats, read_traffic_snapshot
 
@@ -22,6 +22,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("daemon", help="Run periodic checks forever")
     subparsers.add_parser("test-message", help="Send a Telegram test message")
     subparsers.add_parser("daily-report", help="Send the daily traffic summary immediately")
+    subparsers.add_parser("poll-commands", help="Poll Telegram commands once and reply if needed")
     subparsers.add_parser("show-interfaces", help="Print all detected Linux interfaces and counters")
     doctor_parser = subparsers.add_parser("doctor", help="Run a first-launch smoke check")
     doctor_parser.add_argument("--send-test-message", action="store_true", help="Also send a Telegram test message")
@@ -56,6 +57,11 @@ def main() -> None:
             f"Daily report sent for {settings.server_name}: "
             f"{format_bytes_as_gb(result.accumulated_bytes):.2f} GB used in {result.period}"
         )
+        return
+
+    if args.command == "poll-commands":
+        handled = process_bot_commands(settings)
+        print(f"Handled {handled} bot command(s)")
         return
 
     if args.command == "show-interfaces":

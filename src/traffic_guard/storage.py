@@ -12,6 +12,7 @@ class State:
     last_total_bytes: int | None = None
     notified_thresholds: list[int] = field(default_factory=list)
     last_daily_report_date: str | None = None
+    telegram_update_offset: int = 0
 
 
 def load_state(path: Path, period: str) -> State:
@@ -21,7 +22,10 @@ def load_state(path: Path, period: str) -> State:
     data = json.loads(path.read_text(encoding="utf-8"))
     saved_period = data.get("period")
     if saved_period != period:
-        return State(period=period)
+        return State(
+            period=period,
+            telegram_update_offset=int(data.get("telegram_update_offset", 0)),
+        )
 
     return State(
         period=saved_period,
@@ -29,6 +33,7 @@ def load_state(path: Path, period: str) -> State:
         last_total_bytes=data.get("last_total_bytes"),
         notified_thresholds=[int(value) for value in data.get("notified_thresholds", [])],
         last_daily_report_date=data.get("last_daily_report_date"),
+        telegram_update_offset=int(data.get("telegram_update_offset", 0)),
     )
 
 

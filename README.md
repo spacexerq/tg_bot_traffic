@@ -143,6 +143,7 @@ sudo /opt/traffic-guard/.venv/bin/traffic-guard --env-file /etc/traffic-guard.en
 
 - `TG_BOT_TOKEN`: Telegram bot token
 - `TG_CHAT_ID`: target user, group or channel chat id
+- `TG_COMMAND_CHAT_ID`: chat id allowed to request `/status` and `/test`, defaults to `TG_CHAT_ID`
 - `TG_SERVER_NAME`: server label in messages
 - `TG_MONTHLY_LIMIT_GB`: monthly traffic cap in gigabytes
 - `TG_ALERT_THRESHOLDS`: comma-separated percentage thresholds
@@ -186,6 +187,39 @@ sudo /opt/traffic-guard/.venv/bin/traffic-guard --env-file /etc/traffic-guard.en
 ```
 
 If the message arrives in Telegram, the bot side is configured correctly.
+
+## Telegram Commands
+
+The daemon can also answer bot commands from Telegram.
+
+Supported commands:
+
+- `/status`: current traffic usage on this server
+- `/test`: test bot reply
+- `/help`: list available commands
+
+By default commands are accepted only from `TG_CHAT_ID`.
+
+If alerts should go to a group, but commands should come from your personal profile, set:
+
+```env
+TG_CHAT_ID=-1001234567890
+TG_COMMAND_CHAT_ID=123456789
+```
+
+Then:
+
+1. Add the bot to the alert group for notifications.
+2. Start a direct chat with the bot from your personal Telegram account.
+3. Send `/start` or `/status` to the bot in the personal chat.
+
+To test command polling immediately:
+
+```bash
+sudo /opt/traffic-guard/.venv/bin/traffic-guard --env-file /etc/traffic-guard.env poll-commands
+```
+
+In daemon mode command polling runs automatically on every loop.
 
 ## Daily Traffic Report
 

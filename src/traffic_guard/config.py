@@ -14,6 +14,7 @@ def _split_csv(value: str) -> list[str]:
 class Settings:
     bot_token: str
     chat_id: str
+    command_chat_id: str
     server_name: str
     monthly_limit_gb: float
     alert_thresholds: list[int]
@@ -54,6 +55,7 @@ def load_settings(env_file: Path | None = None) -> Settings:
 
     bot_token = os.environ["TG_BOT_TOKEN"]
     chat_id = os.environ["TG_CHAT_ID"]
+    command_chat_id = os.environ.get("TG_COMMAND_CHAT_ID", chat_id)
     server_name = os.environ.get("TG_SERVER_NAME", "unknown-server")
     monthly_limit_gb = float(os.environ["TG_MONTHLY_LIMIT_GB"])
     thresholds = sorted({int(item) for item in _split_csv(os.environ.get("TG_ALERT_THRESHOLDS", "80,90,100"))})
@@ -81,6 +83,7 @@ def load_settings(env_file: Path | None = None) -> Settings:
     return Settings(
         bot_token=bot_token,
         chat_id=chat_id,
+        command_chat_id=command_chat_id,
         server_name=server_name,
         monthly_limit_gb=monthly_limit_gb,
         alert_thresholds=thresholds,
