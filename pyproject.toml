@@ -7,7 +7,7 @@ name = "traffic-guard"
 version = "0.1.0"
 description = "Telegram alerts for VPS traffic usage"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 authors = [
   { name = "Codex" }
 ]

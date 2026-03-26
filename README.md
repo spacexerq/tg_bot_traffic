@@ -56,7 +56,7 @@ Those can be added later if you want a single control bot.
 ## Requirements On VPS
 
 - Linux server with `/proc/net/dev`
-- Python 3.11+
+- Python 3.10+
 - outbound access to `api.telegram.org`
 
 ## Quick Start
